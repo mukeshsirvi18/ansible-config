@@ -1,0 +1,61 @@
+---
+- name: Install and Configure Elasticsearch Cluster
+  hosts: all
+  become: yes
+  tasks:
+    # Step 1: Add the Elasticsearch GPG key
+    - name: Add Elasticsearch GPG key
+      shell: |
+        curl -fsSL https://artifacts.elastic.co/GPG-KEY-elasticsearch | sudo gpg --dearmor -o /usr/share/keyrings/elastic.gpg
+      args:
+        creates: /usr/share/keyrings/elastic.gpg
+
+    # Step 2: Add the Elasticsearch APT repository
+    - name: Add Elasticsearch APT repository
+      shell: |
+        echo "deb [signed-by=/usr/share/keyrings/elastic.gpg] https://artifacts.elastic.co/packages/7.x/apt stable main" | sudo tee -a /etc/apt/sources.list.d/elastic-7.x.list
+      args:
+        creates: /etc/apt/sources.list.d/elastic-7.x.list
+
+    # Step 3: Update apt package cache
+    - name: Update apt package cache
+      apt:
+        update_cache: yes
+
+    # Step 4: Install Elasticsearch
+    - name: Install Elasticsearch
+      apt:
+        name: elasticsearch
+        state: present
+
+    # Step 5: Configure Elasticsearch as master or slave (for master/slave setup)
+    - name: Configure Elasticsearch settings (master or slave node)
+      blockinfile:
+        path: /etc/elasticsearch/elasticsearch.yml
+        marker: "# {mark} ANSIBLE MANAGED BLOCK"
+        block: |
+          node.name: "{{ inventory_hostname }}"
+          network.host: 0.0.0.0
+          discovery.seed_hosts: ["{{ groups['master'][0] }}"]
+          cluster.initial_master_nodes: ["{{ groups['master'][0] }}"]
+          {% if inventory_hostname in groups['master'] %}
+          node.master: true
+          node.data: true
+          {% else %}
+          node.master: false
+          node.data: true
+          {% endif %}
+
+    # Step 6: Enable and start Elasticsearch service
+    - name: Enable and start Elasticsearch service
+      service:
+        name: elasticsearch
+        state: started
+        enabled: yes
+
+    # Step 7: Restart Elasticsearch service after configuration changes
+    - name: Restart Elasticsearch service
+      service:
+        name: elasticsearch
+        state: restarted
+

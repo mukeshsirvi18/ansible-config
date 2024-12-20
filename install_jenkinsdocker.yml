@@ -1,0 +1,45 @@
+---
+- name: Install Jenkins on Ubuntu servers
+  hosts: all
+  become: yes  # Use sudo privileges
+  tasks:
+
+    - name: Install required dependencies
+      apt:
+        name: wget
+        state: present
+        update_cache: yes
+
+    - name: Download Jenkins GPG key
+      get_url:
+        url: https://pkg.jenkins.io/debian-stable/jenkins.io-2023.key
+        dest: /usr/share/keyrings/jenkins-keyring.asc
+        mode: '0644'
+
+    - name: Add Jenkins repository to apt sources
+      copy:
+        content: "deb [signed-by=/usr/share/keyrings/jenkins-keyring.asc] https://pkg.jenkins.io/debian-stable binary/"
+        dest: /etc/apt/sources.list.d/jenkins.list
+
+    - name: Update apt cache
+      apt:
+        update_cache: yes
+
+    - name: Install Jenkins
+      apt:
+        name: jenkins
+        state: present
+
+    - name: Start and enable Jenkins service
+      systemd:
+        name: jenkins
+        state: started
+        enabled: yes
+
+    - name: Display Jenkins unlock password
+      command: "cat /var/lib/jenkins/secrets/initialAdminPassword"
+      register: jenkins_password
+
+    - name: Print Jenkins unlock password
+      debug:
+        msg: "Jenkins initial admin password: {{ jenkins_password.stdout }}"

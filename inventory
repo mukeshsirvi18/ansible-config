@@ -1,0 +1,7 @@
+[master]
+master_host ansible_host=18.207.218.52 ansible_user=ansible
+
+[slaves]
+slave1_host ansible_host=54.196.184.235 ansible_user=ansible
+slave2_host ansible_host=18.207.222.18 ansible_user=ansible
+

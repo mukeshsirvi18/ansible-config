@@ -1,0 +1,61 @@
+---
+- name: Install Docker on Ubuntu servers
+  hosts: all
+  become: yes  # Use sudo privileges
+  tasks:
+
+    # Remove old Docker versions
+    - name: Remove old Docker versions (if any)
+      shell: |
+        for pkg in docker.io docker-doc docker-compose docker-compose-v2 podman-docker containerd runc; do
+          sudo apt-get remove -y $pkg;
+        done
+      ignore_errors: yes
+
+    # Install required dependencies
+    - name: Install ca-certificates and curl
+      apt:
+        name:
+          - ca-certificates
+          - curl
+        state: present
+        update_cache: yes
+
+    # Create keyrings directory
+    - name: Create keyrings directory
+      file:
+        path: /etc/apt/keyrings
+        state: directory
+        mode: '0755'
+
+    # Add Docker's official GPG key
+    - name: Add Docker's official GPG key
+      shell: |
+        curl -fsSL https://download.docker.com/linux/ubuntu/gpg -o /etc/apt/keyrings/docker.asc
+        chmod a+r /etc/apt/keyrings/docker.asc
+
+    # Add Docker repository to apt sources
+    - name: Add Docker repository to apt sources
+      shell: |
+        echo "deb [arch=$(dpkg --print-architecture) signed-by=/etc/apt/keyrings/docker.asc] https://download.docker.com/linux/ubuntu $(. /etc/os-release && echo "$VERSION_CODENAME") stable" | \
+        tee /etc/apt/sources.list.d/docker.list > /dev/null
+      args:
+        creates: /etc/apt/sources.list.d/docker.list
+
+    # Update apt cache
+    - name: Update apt cache
+      apt:
+        update_cache: yes
+
+    # Install Docker
+    - name: Install Docker packages
+      apt:
+        name:
+          - docker-ce
+          - docker-ce-cli
+          - containerd.io
+          - docker-buildx-plugin
+          - docker-compose-plugin
+        state: present
+        update_cache: yes
+

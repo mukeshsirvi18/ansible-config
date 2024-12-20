@@ -1,0 +1,89 @@
+---
+- name: Install and Configure MongoDB
+  hosts: all
+  become: yes
+  tasks:
+    # Step 1: Install required packages (gnupg, curl)
+    - name: Install required packages (gnupg, curl)
+      apt:
+        name:
+          - gnupg
+          - curl
+        state: present
+        update_cache: yes
+
+    # Step 2: Add MongoDB repository GPG key
+    - name: Add MongoDB repository GPG key
+      shell: |
+        curl -fsSL https://www.mongodb.org/static/pgp/server-8.0.asc | gpg --dearmor -o /usr/share/keyrings/mongodb-server-8.0.gpg
+      args:
+        creates: /usr/share/keyrings/mongodb-server-8.0.gpg
+
+    # Step 3: Add MongoDB repository to sources.list
+    - name: Add MongoDB repository to sources.list
+      shell: |
+        echo "deb [ arch=amd64,arm64 signed-by=/usr/share/keyrings/mongodb-server-8.0.gpg ] https://repo.mongodb.org/apt/ubuntu noble/mongodb-org/8.0 multiverse" | sudo tee /etc/apt/sources.list.d/mongodb-org-8.0.list
+
+    # Step 4: Update apt cache
+    - name: Update apt cache
+      apt:
+        update_cache: yes
+
+    # Step 5: Install MongoDB
+    - name: Install MongoDB
+      apt:
+        name: mongodb-org
+        state: present
+
+    # Step 6: Install MongoDB shell (mongosh)
+    - name: Install MongoDB shell (mongosh)
+      apt:
+        name: mongodb-mongosh
+        state: present
+
+    # Step 7: Enable and start MongoDB service
+    - name: Enable and start MongoDB service
+      service:
+        name: mongod
+        state: started
+        enabled: yes
+
+    # Step 8: Set replication configuration in mongod.conf
+    - name: Set replication configuration in mongod.conf
+      blockinfile:
+        path: /etc/mongod.conf
+        marker: "# {mark} ANSIBLE MANAGED BLOCK"
+        block: |
+          replication:
+            replSetName: "rs0"
+
+    # Step 9: Restart MongoDB service to apply replication configuration
+    - name: Restart MongoDB service
+      service:
+        name: mongod
+        state: restarted
+
+    # Step 10: Initialize replica set (only on master node)
+    - name: Initialize replica set if not already initialized (only on master node)
+      shell: |
+        mongosh --host "54.165.136.168" --eval '
+          if (!rs.status().ok) {
+            rs.initiate({
+              _id: "rs0",
+              members: [
+                { _id: 0, host: "54.165.136.168:27017" },
+                { _id: 1, host: "44.207.4.3:27017" }
+              ]
+            })
+          }'
+      when: inventory_hostname == "master_host"
+      register: rs_init
+      failed_when: rs_init.rc != 0 and "'already initialized' not in rs_init.stderr"
+      ignore_errors: yes
+
+    # Step 11: Verify replica set status (only on master node)
+    - name: Verify replica set status (only on master node)
+      shell: |
+        mongosh --host "54.165.136.168" --eval 'rs.status()'
+      when: inventory_hostname == "master_host"
+

@@ -1,0 +1,83 @@
+---
+- name: Install and Configure MongoDB
+  hosts: all
+  become: yes
+  tasks:
+    # Step 1: Install required packages
+    - name: Install required packages (gnupg, curl)
+      apt:
+        name:
+          - gnupg
+          - curl
+        state: present
+        update_cache: yes
+
+    # Step 2: Add MongoDB repository GPG key
+    - name: Add MongoDB repository GPG key
+      shell: |
+        curl -fsSL https://www.mongodb.org/static/pgp/server-8.0.asc | gpg --dearmor -o /usr/share/keyrings/mongodb-server-8.0.gpg
+      args:
+        creates: /usr/share/keyrings/mongodb-server-8.0.gpg
+
+    # Step 3: Add MongoDB repository to sources.list
+    - name: Add MongoDB repository to sources.list
+      shell: |
+        echo "deb [ arch=amd64,arm64 signed-by=/usr/share/keyrings/mongodb-server-8.0.gpg ] https://repo.mongodb.org/apt/ubuntu noble/mongodb-org/8.0 multiverse" | sudo tee /etc/apt/sources.list.d/mongodb-org-8.0.list
+
+    # Step 4: Update apt cache
+    - name: Update apt cache
+      apt:
+        update_cache: yes
+
+    # Step 5: Install MongoDB
+    - name: Install MongoDB
+      apt:
+        name: mongodb-org
+        state: present
+
+    # Step 6: Install MongoDB Shell (mongosh)
+    - name: Install MongoDB shell (mongosh)
+      apt:
+        name: mongodb-mongosh
+        state: present
+
+    # Step 7: Enable and start MongoDB service
+    - name: Enable and start MongoDB service
+      service:
+        name: mongod
+        state: started
+        enabled: yes
+
+    # Step 8: Set replication configuration in mongod.conf
+    - name: Set replication configuration in mongod.conf
+      blockinfile:
+        path: /etc/mongod.conf
+        marker: "# {mark} ANSIBLE MANAGED BLOCK"
+        block: |
+          replication:
+            replSetName: "rs0"
+
+    # Step 9: Restart MongoDB service to apply changes
+    - name: Restart MongoDB service to apply replication configuration
+      service:
+        name: mongod
+        state: restarted
+
+    # Step 10: Check if replica set is already initialized
+    - name: Check if replica set is already initialized
+      command: mongosh --eval "rs.status()"
+      register: rs_status
+      ignore_errors: yes
+
+    # Step 11: Initialize replica set if not already initialized
+    - name: Initialize replica set if not already initialized
+      shell: |
+        mongosh --eval 'rs.initiate({ _id: "rs0", members: [ { _id: 0, host: "54.165.136.168:27017" }, { _id: 1, host: "44.207.4.3:27017" } ] })'
+      when: rs_status.failed
+
+    # Step 12: Add secondary node to replica set
+    - name: Add secondary node to replica set
+      shell: |
+        mongosh --eval 'rs.add("44.207.4.3:27017")'
+      when: rs_status.rc == 0
+
